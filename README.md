@@ -1,18 +1,20 @@
-# 山健客 - 山友活動邀約平台 ⛰️
+<div align="center">
+<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+</div>
 
-這是一個專為台灣登山愛好者設計的平台，提供活動邀約與報名功能。
+# Run and deploy your AI Studio app
 
-### 🏔️ 靈感來源
-來自於對大自然的熱愛，曾造訪過：
-* **北三錐山** (大雪山森林遊樂區)
-* **東卯山大O路線** (谷關)
-* **雲嘉五連峰**
+This contains everything you need to run your app locally.
 
-### 🛠️ 技術架構
-* **前端**: React + TypeScript (Vite)
-* **後端/資料庫**: Firebase
-* **AI 支援**: Google Gemini (透過 AI Studio 開發)
+View your app in AI Studio: https://ai.studio/apps/1819582e-efe5-4d28-a2f7-00f4de01a55e
 
-### 🚀 如何執行
-1. 安裝環境：`npm install`
-2. 啟動專案：`npm run dev`
+## Run Locally
+
+**Prerequisites:**  Node.js
+
+
+1. Install dependencies:
+   `npm install`
+2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+3. Run the app:
+   `npm run dev`

@@ -40,7 +40,9 @@ import {
   Camera,
   Send,
   LogOut,
-  LogIn
+  LogIn,
+  Facebook,
+  Twitter
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format } from 'date-fns';
@@ -71,7 +73,7 @@ interface Participant {
 
 // --- Components ---
 
-const Navbar = ({ user }: { user: User | null }) => {
+const Navbar = () => {
   return (
     <nav className="bg-emerald-800 text-white sticky top-0 z-50 shadow-md">
       <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
@@ -79,28 +81,6 @@ const Navbar = ({ user }: { user: User | null }) => {
           <Mountain className="w-8 h-8 text-emerald-300" />
           <span>山健客</span>
         </Link>
-        <div className="flex items-center gap-4">
-          {user ? (
-            <div className="flex items-center gap-3">
-              <img src={user.photoURL || ''} alt={user.displayName || ''} className="w-8 h-8 rounded-full border border-emerald-400" />
-              <button 
-                onClick={logOut}
-                className="p-2 hover:bg-emerald-700 rounded-full transition-colors"
-                title="登出"
-              >
-                <LogOut className="w-5 h-5" />
-              </button>
-            </div>
-          ) : (
-            <button 
-              onClick={signIn}
-              className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 px-4 py-2 rounded-lg font-medium transition-colors"
-            >
-              <LogIn className="w-5 h-5" />
-              <span>登入</span>
-            </button>
-          )}
-        </div>
       </div>
     </nav>
   );
@@ -246,7 +226,7 @@ const Home = () => {
 );
 };
 
-const CreateEvent = ({ user }: { user: User | null }) => {
+const CreateEvent = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -260,36 +240,36 @@ const CreateEvent = ({ user }: { user: User | null }) => {
     creatorName: ''
   });
 
-  // Update creator name when user is available
-  useEffect(() => {
-    if (user && !formData.creatorName) {
-      setFormData(prev => ({ ...prev, creatorName: user.displayName || '' }));
-    }
-  }, [user]);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    if (!user) {
-      setError('請先登入再發起活動');
+    if (!formData.creatorName) {
+      setError('請填寫發起人姓名');
       return;
     }
     
     setLoading(true);
     try {
-      const dateTimeStr = `${formData.date}T${formData.time}`;
+      // Ensure time is in HH:mm format (some browsers might send HH:mm:ss)
+      const timePart = formData.time.split(':').slice(0, 2).join(':');
+      const dateTimeStr = `${formData.date}T${timePart}`;
+      console.log('Parsing dateTimeStr:', dateTimeStr);
+      
       const dateTime = new Date(dateTimeStr);
       
       if (isNaN(dateTime.getTime())) {
-        throw new Error('無效的日期或時間格式');
+        console.error('Invalid date/time:', dateTimeStr);
+        throw new Error('日期或時間格式不正確，請重新選擇。');
       }
+
+      console.log('Creating event with dateTime:', dateTime);
 
       await addDoc(collection(db, 'events'), {
         title: formData.title,
         dateTime: Timestamp.fromDate(dateTime),
         location: formData.location,
-        description: formData.description,
+        description: formData.description || '',
         maxParticipants: Number(formData.maxParticipants),
         creatorName: formData.creatorName,
         createdAt: Timestamp.now()
@@ -297,45 +277,19 @@ const CreateEvent = ({ user }: { user: User | null }) => {
       navigate('/');
     } catch (err: any) {
       console.error('Error adding event:', err);
-      setError(err.message || '發起活動失敗，請檢查輸入內容或稍後再試');
       
-      // Detailed logging for Firestore errors as per guidelines
-      if (err.code === 'permission-denied') {
-        const errInfo = {
-          error: err.message,
-          operationType: 'create',
-          path: 'events',
-          authInfo: {
-            userId: auth.currentUser?.uid,
-            email: auth.currentUser?.email,
-          }
-        };
-        console.error('Firestore Error Details:', JSON.stringify(errInfo));
+      let errorMessage = '發起活動失敗，請檢查輸入內容或稍後再試';
+      if (err.message && err.message.includes('permission-denied')) {
+        errorMessage = '權限不足：請確認資料庫規則已更新。';
+      } else if (err.message) {
+        errorMessage = err.message;
       }
+      
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
   };
-
-  if (!user) {
-    return (
-      <div className="max-w-2xl mx-auto px-4 py-20 text-center">
-        <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-12">
-          <UserIcon className="w-16 h-16 text-gray-200 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">需要登入</h2>
-          <p className="text-gray-500 mb-8">發起登山邀約需要先驗證您的身份。</p>
-          <button 
-            onClick={signIn}
-            className="bg-emerald-800 text-white px-8 py-3 rounded-xl font-bold hover:bg-emerald-700 transition-all flex items-center gap-2 mx-auto"
-          >
-            <LogIn className="w-5 h-5" />
-            <span>使用 Google 登入</span>
-          </button>
-          <Link to="/" className="block mt-6 text-emerald-700 font-medium hover:underline">返回活動列表</Link>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8">
@@ -429,6 +383,7 @@ const CreateEvent = ({ user }: { user: User | null }) => {
               <input 
                 required
                 type="text" 
+                placeholder="您的姓名或暱稱"
                 className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition-all"
                 value={formData.creatorName}
                 onChange={e => setFormData({...formData, creatorName: e.target.value})}
@@ -439,9 +394,9 @@ const CreateEvent = ({ user }: { user: User | null }) => {
           <button 
             disabled={loading}
             type="submit"
-            className="w-full bg-emerald-800 text-white py-4 rounded-xl font-bold text-lg shadow-lg shadow-emerald-900/20 hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+            className="w-full bg-emerald-800 text-white py-4 rounded-2xl font-black text-lg shadow-xl shadow-emerald-900/20 hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
           >
-            {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : '發布邀約'}
+            {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : '立即發起邀約'}
           </button>
         </form>
       </div>
@@ -657,9 +612,33 @@ const EventDetail = () => {
                     window.open(`https://social-plugins.line.me/lineit/share?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`, '_blank');
                   }}
                   className="flex items-center gap-2 bg-[#00B900] text-white px-4 py-2 rounded-xl font-bold text-sm hover:opacity-90 transition-all"
+                  title="分享到 Line"
                 >
                   <Send className="w-4 h-4" />
-                  分享到 Line
+                  Line
+                </button>
+                <button 
+                  onClick={() => {
+                    const url = window.location.href;
+                    window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`, '_blank');
+                  }}
+                  className="flex items-center gap-2 bg-[#1877F2] text-white px-4 py-2 rounded-xl font-bold text-sm hover:opacity-90 transition-all"
+                  title="分享到 Facebook"
+                >
+                  <Facebook className="w-4 h-4" />
+                  Facebook
+                </button>
+                <button 
+                  onClick={() => {
+                    const url = window.location.href;
+                    const text = `【登山邀約】${event.title}\n時間：${format(event.dateTime.toDate(), 'yyyy/MM/dd HH:mm')}\n地點：${event.location}\n立即報名：`;
+                    window.open(`https://twitter.com/intent/tweet?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`, '_blank');
+                  }}
+                  className="flex items-center gap-2 bg-[#1DA1F2] text-white px-4 py-2 rounded-xl font-bold text-sm hover:opacity-90 transition-all"
+                  title="分享到 Twitter"
+                >
+                  <Twitter className="w-4 h-4" />
+                  Twitter
                 </button>
                 <button 
                   onClick={() => {
@@ -805,15 +784,7 @@ const EventDetail = () => {
 };
 
 export default function App() {
-  const [user, setUser] = useState<User | null>(null);
-  const [authReady, setAuthReady] = useState(false);
-
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-      setAuthReady(true);
-    });
-
     // Test Firestore connection
     const testConnection = async () => {
       try {
@@ -825,27 +796,17 @@ export default function App() {
       }
     };
     testConnection();
-
-    return () => unsubscribe();
   }, []);
-
-  if (!authReady) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Loader2 className="w-12 h-12 text-emerald-800 animate-spin" />
-      </div>
-    );
-  }
 
   return (
     <Router>
       <div className="min-h-screen bg-[#F8F9F8] font-sans text-gray-900">
-        <Navbar user={user} />
+        <Navbar />
         <main>
           <AnimatePresence mode="wait">
             <Routes>
               <Route path="/" element={<Home />} />
-              <Route path="/create" element={<CreateEvent user={user} />} />
+              <Route path="/create" element={<CreateEvent />} />
               <Route path="/event/:id" element={<EventDetail />} />
             </Routes>
           </AnimatePresence>

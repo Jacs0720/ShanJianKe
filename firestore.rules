@@ -87,11 +87,10 @@ service cloud.firestore {
       // Anyone can read events to see the list and details
       allow read: if true;
       
-      // Only authenticated users can create events
-      allow create: if isAuthenticated() && isValidEvent(request.resource.data);
+      // Anyone can create events (login requirement removed)
+      allow create: if isValidEvent(request.resource.data);
       
-      // Updates are not allowed for now to keep it simple, or only by creator if we had UIDs
-      // For MVP, we allow anyone to read, but creation is protected.
+      // Updates and deletes are not allowed for now
       allow update, delete: if false; 
     }
 

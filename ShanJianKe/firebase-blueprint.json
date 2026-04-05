@@ -1,0 +1,42 @@
+{
+  "entities": {
+    "Event": {
+      "title": "Mountain Event",
+      "description": "A hiking or mountain climbing event organized by a user.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "The title of the event." },
+        "dateTime": { "type": "string", "format": "date-time", "description": "The date and time of the event." },
+        "location": { "type": "string", "description": "The location or mountain name." },
+        "description": { "type": "string", "description": "Detailed description of the event." },
+        "maxParticipants": { "type": "integer", "description": "Maximum number of participants allowed." },
+        "creatorName": { "type": "string", "description": "Name of the event creator." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the event was created." }
+      },
+      "required": ["title", "dateTime", "location", "maxParticipants", "creatorName"]
+    },
+    "Participant": {
+      "title": "Event Participant",
+      "description": "A person who has signed up for a mountain event.",
+      "type": "object",
+      "properties": {
+        "eventId": { "type": "string", "description": "The ID of the event being joined." },
+        "name": { "type": "string", "description": "The name of the participant." },
+        "contact": { "type": "string", "description": "Contact information (Line ID or phone)." },
+        "note": { "type": "string", "description": "Optional note from the participant." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the participant signed up." }
+      },
+      "required": ["eventId", "name", "contact"]
+    }
+  },
+  "firestore": {
+    "/events/{eventId}": {
+      "schema": "Event",
+      "description": "Collection of mountain events."
+    },
+    "/participants/{participantId}": {
+      "schema": "Participant",
+      "description": "Collection of participants for all events."
+    }
+  }
+}

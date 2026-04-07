@@ -757,17 +757,19 @@ const EventDetail = () => {
       setAnalysisResult(null);
 
       try {
+        // Try to get API key from multiple possible sources
         // @ts-ignore
         let apiKey = (process.env.GEMINI_API_KEY as string);
         
-        // Fallback to import.meta.env if process.env is not available
+        // Fallback to import.meta.env (standard Vite way)
         if (!apiKey || apiKey === "MY_GEMINI_API_KEY" || apiKey === "") {
           // @ts-ignore
-          apiKey = import.meta.env?.VITE_GEMINI_API_KEY;
+          apiKey = import.meta.env.VITE_GEMINI_API_KEY;
         }
         
+        // Final check
         if (!apiKey || apiKey === "MY_GEMINI_API_KEY" || apiKey === "") {
-          throw new Error("API Key 未設定。請在 Vercel Settings -> Environment Variables 中新增 GEMINI_API_KEY，或在 .env 中設定 VITE_GEMINI_API_KEY。");
+          throw new Error("API Key 未設定。請在 Vercel 或本地環境變數中設定 GEMINI_API_KEY 或 VITE_GEMINI_API_KEY。");
         }
 
         const genAI = new GoogleGenerativeAI(apiKey);

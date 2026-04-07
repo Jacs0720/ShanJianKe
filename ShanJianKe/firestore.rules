@@ -11,6 +11,10 @@
 //   - description: string (optional, 0-2000 chars)
 //   - maxParticipants: number (required, > 0)
 //   - creatorName: string (required, 1-50 chars)
+//   - celebrationLocation: string (optional, 0-100 chars)
+//   - managementPassword: string (required, 1-50 chars)
+//   - status: string (required, 'active' | 'cancelled' | 'completed')
+//   - photos: list (required, max 10 strings)
 //   - createdAt: timestamp (required)
 //
 // Collection: participants
@@ -60,12 +64,16 @@ service cloud.firestore {
     // ===============================================================
 
     function isValidEvent(data) {
-      return hasRequiredFields(['title', 'dateTime', 'location', 'maxParticipants', 'creatorName', 'createdAt']) &&
-             hasOnlyAllowedFields(['title', 'dateTime', 'location', 'description', 'maxParticipants', 'creatorName', 'createdAt']) &&
+      return hasRequiredFields(['title', 'dateTime', 'location', 'maxParticipants', 'creatorName', 'createdAt', 'managementPassword', 'status', 'photos']) &&
+             hasOnlyAllowedFields(['title', 'dateTime', 'location', 'description', 'maxParticipants', 'creatorName', 'createdAt', 'celebrationLocation', 'managementPassword', 'status', 'photos']) &&
              isValidString('title', 1, 100) &&
              isValidString('location', 1, 100) &&
              isValidNumber('maxParticipants', 1) &&
              isValidString('creatorName', 1, 50) &&
+             isValidString('managementPassword', 1, 50) &&
+             data.status in ['active', 'cancelled', 'completed'] &&
+             data.photos is list &&
+             data.photos.size() <= 10 &&
              data.dateTime is timestamp &&
              data.createdAt is timestamp;
     }
@@ -90,15 +98,19 @@ service cloud.firestore {
       // Anyone can create events (login requirement removed)
       allow create: if isValidEvent(request.resource.data);
       
-      // Updates and deletes are not allowed for now
-      allow update, delete: if false; 
+      // Updates are allowed if the management password matches
+      allow update: if isValidEvent(request.resource.data) && 
+                      request.resource.data.managementPassword == resource.data.managementPassword;
+      
+      // Deletes are not allowed for now (use status='cancelled')
+      allow delete: if false; 
     }
 
     match /participants/{participantId} {
       // Anyone can read participants to count them
       allow read: if true;
       
-      // Anyone can join an event (MVP doesn't require auth for joining, but we could add it)
+      // Anyone can join an event
       allow create: if isValidParticipant(request.resource.data);
       
       allow update, delete: if false;

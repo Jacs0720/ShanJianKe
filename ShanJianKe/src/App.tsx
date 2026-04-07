@@ -1,7 +1,7 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
- * Version: 2026-04-07-v3 (Added Event Photos and fixed AI Analysis)
+ * Version: 2026-04-07-v4 (Updated Gemini model to gemini-1.5-flash-latest)
  */
 
 import React, { useState, useEffect } from 'react';
@@ -773,7 +773,7 @@ const EventDetail = () => {
         }
 
         const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
         
         const result = await model.generateContent([
           "這是一張與登山活動相關的圖片（可能是裝備、地圖或風景）。請分析這張圖片，並給予專業的登山建議或資訊。",

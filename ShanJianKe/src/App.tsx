@@ -1,7 +1,7 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
- * Version: 2026-04-07-v4 (Updated Gemini model to gemini-1.5-flash-latest)
+ * Version: 2026-04-07-v5 (Removed AI features, added photo captions)
  */
 
 import React, { useState, useEffect } from 'react';
@@ -52,15 +52,19 @@ import {
   Search,
   CheckCircle2,
   Image as ImageIcon,
-  X
+  X,
+  MessageSquare
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import Markdown from 'react-markdown';
 
 // --- Types ---
+interface EventPhoto {
+  url: string;
+  caption: string;
+}
+
 interface MountainEvent {
   id: string;
   title: string;
@@ -72,7 +76,7 @@ interface MountainEvent {
   createdAt: Timestamp;
   participantCount?: number;
   celebrationLocation?: string;
-  photos?: string[];
+  photos?: EventPhoto[];
   status?: 'active' | 'cancelled' | 'completed';
   managementPassword?: string;
 }
@@ -538,11 +542,7 @@ const EventDetail = () => {
 
   // Photo State
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
-
-  // Gemini State
-  const [analyzing, setAnalyzing] = useState(false);
-  const [analysisResult, setAnalysisResult] = useState<string | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [photoCaption, setPhotoCaption] = useState('');
 
   useEffect(() => {
     if (!id) return;
@@ -672,12 +672,18 @@ const EventDetail = () => {
       const compressedBase64 = await compressImage(file);
       console.log('Compression complete. Size:', (compressedBase64.length / 1024).toFixed(2), 'KB');
       
-      const newPhotos = [...(event.photos || []), compressedBase64];
+      const newPhoto: EventPhoto = {
+        url: compressedBase64,
+        caption: photoCaption || '活動照片'
+      };
+      
+      const newPhotos = [...(event.photos || []), newPhoto];
       console.log('Updating Firestore document...');
       await updateDoc(doc(db, 'events', id), {
         photos: newPhotos
       });
       console.log('Firestore update successful!');
+      setPhotoCaption(''); // Clear caption after upload
     } catch (err) {
       console.error('Error uploading photo:', err);
       alert('上傳失敗，可能是照片太大了 (Firestore 限制 1MB)');
@@ -743,68 +749,6 @@ const EventDetail = () => {
     } finally {
       setJoining(false);
     }
-  };
-
-  const handleImageAnalysis = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onloadend = async () => {
-      const base64Data = (reader.result as string).split(',')[1];
-      setImagePreview(reader.result as string);
-      setAnalyzing(true);
-      setAnalysisResult(null);
-
-      try {
-        // Try to get API key from multiple possible sources
-        // @ts-ignore
-        let apiKey = (process.env.GEMINI_API_KEY as string);
-        
-        // Fallback to import.meta.env (standard Vite way)
-        if (!apiKey || apiKey === "MY_GEMINI_API_KEY" || apiKey === "") {
-          // @ts-ignore
-          apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-        }
-        
-        // Final check
-        if (!apiKey || apiKey === "MY_GEMINI_API_KEY" || apiKey === "") {
-          throw new Error("API Key 未設定。請在 Vercel 或本地環境變數中設定 GEMINI_API_KEY 或 VITE_GEMINI_API_KEY。");
-        }
-
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
-        
-        const result = await model.generateContent([
-          "這是一張與登山活動相關的圖片（可能是裝備、地圖或風景）。請分析這張圖片，並給予專業的登山建議或資訊。",
-          {
-            inlineData: {
-              data: base64Data,
-              mimeType: file.type
-            }
-          }
-        ]);
-        
-        const response = await result.response;
-        const text = response.text();
-        
-        if (!text) {
-          throw new Error("AI 回傳了空內容，請嘗試換一張照片。");
-        }
-        
-        setAnalysisResult(text);
-      } catch (error: any) {
-        console.error("Gemini analysis error:", error);
-        let msg = error.message || "發生未知錯誤";
-        if (msg.includes("API key not valid")) {
-          msg = "API Key 無效，請檢查您的金鑰是否正確。";
-        }
-        setAnalysisResult(`AI 分析失敗 (v2)：${msg}`);
-      } finally {
-        setAnalyzing(false);
-      }
-    };
-    reader.readAsDataURL(file);
   };
 
   if (loading) {
@@ -1081,44 +1025,6 @@ const EventDetail = () => {
             </div>
           </div>
 
-          {/* Gemini Analysis Section */}
-          <div className="bg-emerald-50 rounded-3xl p-8 border border-emerald-100">
-            <div className="flex items-center gap-3 mb-6">
-              <Camera className="w-6 h-6 text-emerald-800" />
-              <h3 className="text-xl font-bold text-emerald-900">山林 AI 助手</h3>
-            </div>
-            <p className="text-emerald-800/70 mb-6">上傳裝備照、路線圖或風景照，讓 AI 為您的行程提供建議！</p>
-            
-            <div className="flex flex-col gap-4">
-              <label className="cursor-pointer bg-white border-2 border-dashed border-emerald-300 rounded-2xl p-6 text-center hover:border-emerald-500 transition-all">
-                <input type="file" accept="image/*" className="hidden" onChange={handleImageAnalysis} />
-                <div className="flex flex-col items-center gap-2">
-                  <Plus className="w-8 h-8 text-emerald-600" />
-                  <span className="font-bold text-emerald-700">點擊上傳圖片</span>
-                </div>
-              </label>
-
-              {imagePreview && (
-                <div className="bg-white rounded-2xl p-4 shadow-sm">
-                  <img src={imagePreview} alt="Preview" className="w-full h-48 object-cover rounded-xl mb-4" />
-                  {analyzing ? (
-                    <div className="flex items-center gap-3 text-emerald-700 font-bold py-4">
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                      <span>AI 正在分析中...</span>
-                    </div>
-                  ) : analysisResult ? (
-                    <div className="bg-emerald-50 p-4 rounded-xl text-emerald-900 text-sm leading-relaxed">
-                      <p className="font-bold mb-2 underline decoration-emerald-300">山林助手分析：</p>
-                      <div className="prose prose-emerald max-w-none prose-sm">
-                        <Markdown>{analysisResult}</Markdown>
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-              )}
-            </div>
-          </div>
-
           {/* Participants List */}
           <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-8">
             <h3 className="text-lg font-bold text-gray-900 mb-6">已報名山友 ({participants.length})</h3>
@@ -1156,11 +1062,22 @@ const EventDetail = () => {
                 <h3 className="text-xl font-bold text-gray-900">活動經典回顧</h3>
               </div>
               {isAdminMode && (
-                <label className="cursor-pointer bg-emerald-50 text-emerald-700 px-4 py-2 rounded-xl font-bold text-sm hover:bg-emerald-100 transition-all flex items-center gap-2">
-                  <Plus className="w-4 h-4" />
-                  上傳照片
-                  <input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} disabled={uploadingPhoto} />
-                </label>
+                <div className="flex flex-col sm:flex-row items-center gap-3">
+                  <div className="relative">
+                    <input 
+                      type="text" 
+                      placeholder="輸入照片說明..." 
+                      className="px-4 py-2 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-emerald-500 outline-none w-48"
+                      value={photoCaption}
+                      onChange={e => setPhotoCaption(e.target.value)}
+                    />
+                  </div>
+                  <label className="cursor-pointer bg-emerald-800 text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-emerald-700 transition-all flex items-center gap-2">
+                    <Plus className="w-4 h-4" />
+                    上傳照片
+                    <input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} disabled={uploadingPhoto} />
+                  </label>
+                </div>
               )}
             </div>
 
@@ -1175,23 +1092,37 @@ const EventDetail = () => {
               <div className="bg-gray-50 rounded-2xl p-12 text-center border-2 border-dashed border-gray-200">
                 <ImageIcon className="w-12 h-12 text-gray-300 mx-auto mb-4" />
                 <p className="text-gray-500">目前還沒有活動照片</p>
-                {isAdminMode && <p className="text-xs text-gray-400 mt-2">身為發起人，您可以上傳最多 10 張經典照片</p>}
+                {isAdminMode && <p className="text-xs text-gray-400 mt-2">身為發起人，您可以上傳照片並加入說明文字</p>}
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                {event.photos.map((photo, idx) => (
-                  <div key={idx} className="relative group aspect-square rounded-2xl overflow-hidden shadow-sm">
-                    <img src={photo} alt={`Event Photo ${idx + 1}`} className="w-full h-full object-cover" />
-                    {isAdminMode && (
-                      <button 
-                        onClick={() => handleDeletePhoto(idx)}
-                        className="absolute top-2 right-2 bg-red-600 text-white p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-                ))}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                {event.photos.map((photo, idx) => {
+                  // Handle both old string format and new object format
+                  const photoUrl = typeof photo === 'string' ? photo : photo.url;
+                  const photoCaption = typeof photo === 'string' ? '' : photo.caption;
+
+                  return (
+                    <div key={idx} className="bg-gray-50 rounded-2xl overflow-hidden shadow-sm border border-gray-100">
+                      <div className="relative aspect-video group">
+                        <img src={photoUrl} alt={`Event Photo ${idx + 1}`} className="w-full h-full object-cover" />
+                        {isAdminMode && (
+                          <button 
+                            onClick={() => handleDeletePhoto(idx)}
+                            className="absolute top-2 right-2 bg-red-600 text-white p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                      {photoCaption && (
+                        <div className="p-4 flex items-start gap-2">
+                          <MessageSquare className="w-4 h-4 text-emerald-600 mt-1 shrink-0" />
+                          <p className="text-sm text-gray-700 leading-relaxed">{photoCaption}</p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

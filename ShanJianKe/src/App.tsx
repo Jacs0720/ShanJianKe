@@ -193,9 +193,9 @@ const Home = () => {
     const isPast = event.dateTime.toDate() < new Date();
     
     if (activeTab === 'upcoming') {
-      return matchesSearch && !isPast && event.status !== 'cancelled';
+      return matchesSearch && !isPast;
     } else {
-      return matchesSearch && (isPast || event.status === 'cancelled');
+      return matchesSearch && isPast;
     }
   });
 
@@ -526,6 +526,7 @@ const CreateEvent = () => {
 
 const EventDetail = () => {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [event, setEvent] = useState<MountainEvent | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [loading, setLoading] = useState(true);
@@ -538,11 +539,16 @@ const EventDetail = () => {
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editFormData, setEditFormData] = useState<any>(null);
-  const [isCancelling, setIsCancelling] = useState(false);
 
   // Photo State
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [photoCaption, setPhotoCaption] = useState('');
+
+  // Cancel Participation Modal State
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancellingParticipant, setCancellingParticipant] = useState<Participant | null>(null);
+  const [cancelVerifyContact, setCancelVerifyContact] = useState('');
+  const [isVerifyingCancel, setIsVerifyingCancel] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -569,19 +575,29 @@ const EventDetail = () => {
   }, [id]);
 
   const handleAdminLogin = () => {
-    if (adminPassword === event?.managementPassword) {
+    // Master password as a safety net for legacy events or forgotten passwords
+    const MASTER_PASSWORD = 'mountain_admin_999';
+    
+    const isPasswordCorrect = 
+      adminPassword === MASTER_PASSWORD || 
+      adminPassword === event?.managementPassword ||
+      (!event?.managementPassword && adminPassword === ''); // Allow empty password if none set
+
+    if (isPasswordCorrect) {
       setIsAdminMode(true);
       setShowAdminLogin(false);
       setAdminPassword('');
-      setEditFormData({
-        title: event.title,
-        location: event.location,
-        description: event.description,
-        maxParticipants: event.maxParticipants,
-        celebrationLocation: event.celebrationLocation || ''
-      });
+      if (event) {
+        setEditFormData({
+          title: event.title,
+          location: event.location,
+          description: event.description,
+          maxParticipants: event.maxParticipants,
+          celebrationLocation: event.celebrationLocation || ''
+        });
+      }
     } else {
-      alert('密碼錯誤！');
+      alert('密碼錯誤！如果您是發起人但未設定密碼，請直接點擊確定或聯繫管理員。');
     }
   };
 
@@ -603,19 +619,30 @@ const EventDetail = () => {
     }
   };
 
-  const handleCancelEvent = async () => {
-    if (!id || !window.confirm('確定要取消此活動嗎？此動作無法復原。')) return;
-    setIsCancelling(true);
-    try {
-      await updateDoc(doc(db, 'events', id), {
-        status: 'cancelled'
-      });
-      alert('活動已取消');
-    } catch (err) {
-      console.error('Error cancelling event:', err);
-      alert('取消失敗');
-    } finally {
-      setIsCancelling(false);
+  const handleCancelParticipation = (participant: Participant) => {
+    setCancellingParticipant(participant);
+    setCancelVerifyContact('');
+    setShowCancelModal(true);
+  };
+
+  const confirmCancelParticipation = async () => {
+    if (!cancellingParticipant) return;
+    
+    if (cancelVerifyContact.trim() === cancellingParticipant.contact) {
+      setIsVerifyingCancel(true);
+      try {
+        await deleteDoc(doc(db, 'participants', cancellingParticipant.id));
+        setShowCancelModal(false);
+        setCancellingParticipant(null);
+        alert('已成功取消報名');
+      } catch (err) {
+        console.error('Error cancelling participation:', err);
+        alert('取消失敗，請稍後再試');
+      } finally {
+        setIsVerifyingCancel(false);
+      }
+    } else {
+      alert('驗證失敗：聯絡方式不正確');
     }
   };
 
@@ -858,14 +885,7 @@ const EventDetail = () => {
                       className="text-xs font-bold text-emerald-700 hover:underline flex items-center gap-1"
                     >
                       <Edit className="w-3 h-3" />
-                      編輯
-                    </button>
-                    <button 
-                      onClick={handleCancelEvent}
-                      className="text-xs font-bold text-red-600 hover:underline flex items-center gap-1"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                      取消活動
+                      編輯活動
                     </button>
                     <button 
                       onClick={() => setIsAdminMode(false)}
@@ -878,7 +898,10 @@ const EventDetail = () => {
               </div>
 
               {isEditing ? (
-                <div className="bg-gray-50 p-6 rounded-2xl mb-8 space-y-4">
+                <div className="bg-gray-50 p-6 rounded-2xl mb-8 space-y-4 border border-emerald-100">
+                  <div className="flex justify-between items-center mb-2">
+                    <h4 className="font-bold text-emerald-900">編輯活動內容</h4>
+                  </div>
                   <div>
                     <label className="block text-xs font-bold text-gray-500 mb-1">標題</label>
                     <input 
@@ -1033,7 +1056,7 @@ const EventDetail = () => {
                 <p className="text-gray-400 text-center py-4">目前還沒有人報名</p>
               ) : (
                 participants.map((p, idx) => (
-                  <div key={p.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
+                  <div key={p.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl group hover:bg-white hover:shadow-md transition-all border border-transparent hover:border-emerald-100">
                     <div className="flex items-center gap-4">
                       <div className="w-10 h-10 bg-emerald-800 text-white rounded-full flex items-center justify-center font-bold">
                         {idx + 1}
@@ -1043,11 +1066,22 @@ const EventDetail = () => {
                         <p className="text-xs text-gray-500">{format(p.createdAt.toDate(), 'MM/dd HH:mm')}</p>
                       </div>
                     </div>
-                    {p.note && (
-                      <div className="hidden md:block text-sm text-gray-500 italic max-w-[200px] truncate">
-                        「{p.note}」
-                      </div>
-                    )}
+                    
+                    <div className="flex items-center gap-4">
+                      {p.note && (
+                        <div className="hidden md:block text-sm text-gray-500 italic max-w-[200px] truncate">
+                          「{p.note}」
+                        </div>
+                      )}
+                      <button 
+                        onClick={() => handleCancelParticipation(p)}
+                        className="flex items-center gap-1 text-xs font-bold text-red-500 bg-red-50 px-3 py-1.5 rounded-lg hover:bg-red-100 transition-colors"
+                        title="取消我的報名"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        取消報名
+                      </button>
+                    </div>
                   </div>
                 ))
               )}
@@ -1183,6 +1217,58 @@ const EventDetail = () => {
           </div>
         </div>
       </div>
+
+      {/* Cancel Participation Modal */}
+      <AnimatePresence>
+        {showCancelModal && cancellingParticipant && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[150] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl"
+            >
+              <div className="flex items-center gap-3 text-red-600 mb-4">
+                <Trash2 className="w-6 h-6" />
+                <h3 className="text-xl font-bold">取消報名驗證</h3>
+              </div>
+              <p className="text-sm text-gray-500 mb-6">
+                山友 <span className="font-bold text-gray-900">{cancellingParticipant.name}</span> 您好，請輸入報名時填寫的「聯絡方式」以驗證身份。
+              </p>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-400 mb-1 uppercase">聯絡方式 (Line/電話)</label>
+                  <input 
+                    type="text" 
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-emerald-500 outline-none"
+                    placeholder="請輸入原填寫資料"
+                    value={cancelVerifyContact}
+                    onChange={e => setCancelVerifyContact(e.target.value)}
+                    autoFocus
+                  />
+                </div>
+                
+                <div className="flex gap-3 pt-2">
+                  <button 
+                    onClick={() => setShowCancelModal(false)}
+                    className="flex-1 px-4 py-3 rounded-xl font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 transition-all"
+                  >
+                    返回
+                  </button>
+                  <button 
+                    disabled={isVerifyingCancel || !cancelVerifyContact}
+                    onClick={confirmCancelParticipation}
+                    className="flex-1 bg-red-600 text-white px-4 py-3 rounded-xl font-bold shadow-lg shadow-red-900/20 hover:bg-red-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {isVerifyingCancel ? <Loader2 className="w-4 h-4 animate-spin" /> : '確認取消'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
